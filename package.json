@@ -1,0 +1,19 @@
+{
+  "name": "travelmates",
+  "version": "1.0.0",
+  "description": "This is a Travelmates Backend using Mern stack.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manas-kokate/TravelMates_Backend.git"
+  },
+  "author": "Manas Kokate",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/manas-kokate/TravelMates_Backend/issues"
+  },
+  "homepage": "https://github.com/manas-kokate/TravelMates_Backend#readme"
+}
