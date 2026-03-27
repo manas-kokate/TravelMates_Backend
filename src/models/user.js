@@ -1,33 +1,33 @@
-import {Schema,model} from "mongoose";
+import { Schema, model } from "mongoose";
 import bcrypt from "bcrypt"
- const userSchema = new Schema({
-    username:{
-        type:String,
-        required:true,
+const userSchema = new Schema({
+    username: {
+        type: String,
+        required: true,
     },
-    email:{
-        type:String,
-        required:true,
+    email: {
+        type: String,
+        required: true,
     },
-    password:{
-        type:String,
-        required:true,
+    password: {
+        type: String,
+        required: true,
     },
-    profilePic:{
-        type:String,
+    profilePic: {
+        type: String,
     },
-    refreshToken:{
-        type:String,
+    refreshToken: {
+        type: String,
     }
- },{timestamps:true});
+}, { timestamps: true });
 
 
- userSchema.pre("save",async(next)=>{
-    if(!this.isModified("password")){
-        return next()
+userSchema.pre("save", async function (next) {
+    if (!this.isModified('password')) {
+        next;
     }
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
-    next();
- })
- export default(model("User",userSchema));
+    next;
+})
+export default (model("User", userSchema));
