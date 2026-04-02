@@ -18,6 +18,14 @@ const userSchema = new Schema({
     },
     refreshToken: {
         type: String,
+    },
+    location: {
+        type: String,
+        required: true
+    },
+    interests: {
+        type: [String],
+        trim: true
     }
 }, { timestamps: true });
 

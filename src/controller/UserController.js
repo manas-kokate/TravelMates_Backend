@@ -1,5 +1,6 @@
 import User from "../models/user.js";
-import cloudinary from "cloudinary";
+import cloudinary from "../config/cloudinary.js";
+import uploadFromBuffer from "../utils/uploadFromBuffer.js";
 import env from "dotenv";
 env.config();
 
@@ -73,24 +74,58 @@ export const uploadProfilePic = async (req, res) => {
                 message: "No file uploaded.."
             })
         }
-        const result = await cloudinary.v2.uploader.upload({ folder: "travelmates/profilePics", resource_type: "image", file: req.file.path }, async (error, result) => {
-            if (error) {
-                return res.send({
-                    status: 500,
-                    message: "Cloudinary upload error.. " + error.message
-                })
-            }
-            user.profilePic = result.secure_url;
-            await user.save();
-            return res.send({
-                status: 200,
-                message: "Profile picture uploaded successfully..",
-                profilePic: user.profilePic
-            })
+        const result = await uploadFromBuffer(req.file.buffer);
+        user.profilePic = result.secure_url;
+        await user.save();
+        return res.send({
+            status: 200,
+            message: "Profile picture uploaded successfully..",
+            profilePic: user.profilePic
         })
-        result.end(req.file.buffer);
+    } catch (error) {
+        return res.send({
+            status: 500,
+            message: "Internal Server Error.." + error.message
+        })
     }
-    catch (error) {
+}
+
+export const searchUsers = async (req, res) => {
+    try {
+        let { location, interests, page, limit, name } = req.query;
+        page = parseInt(page);
+        limit = parseInt(limit);
+        const query = {};
+        if (name) {
+            query.username = { $regex: name, $options: "i" }
+        }
+        if (location) {
+            query.location = { $regex: location, $options: "i" }
+        }
+        if (interests.length > 0) {
+            const interestsArray = interests.split(',').map(interest => interest.trim());
+            query.interests = {
+                $in: interestsArray
+            };
+        }
+
+        query._id = { $ne: req.id }
+
+        const skip = (page - 1) * limit;
+
+        const users = await User.find(query).select("-password -refreshtoken").skip(skip).limit(limit);
+
+        const totalUsers = await User.countDocuments(query);
+
+        return res.send({
+            status: 200,
+            message: "Users fetched successfully",
+            users,
+            totalPages: Math.ceil(totalUsers / limit),
+            currentPage: page,
+            totalUsers,
+        })
+    } catch (error) {
         return res.send({
             status: 500,
             message: "Internal Server Error.." + error.message
