@@ -93,8 +93,11 @@ export const uploadProfilePic = async (req, res) => {
 export const searchUsers = async (req, res) => {
     try {
         let { location, interests, page, limit, name } = req.query;
-        page = parseInt(page);
-        limit = parseInt(limit);
+        if (req.query.location) location = req.query.location;
+        if (req.query.interests) interests = req.query.interests;
+        if (req.query.name) name = req.query.name;
+        page = req.query.page ? parseInt(page) : 1;
+        limit = req.query.limit ? parseInt(limit) : 1;
         const query = {};
         if (name) {
             query.username = { $regex: name, $options: "i" }

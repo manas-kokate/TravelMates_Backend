@@ -7,8 +7,7 @@ env.config();
 
 export const registerUser = async (req, res) => {
     try {
-        const { username, email, password } = req.body;
-        console.log(req.body);
+        const { username, email, password, location, interests } = req.body;
 
         // existing user
         const existingUser = await User.findOne({
@@ -26,7 +25,9 @@ export const registerUser = async (req, res) => {
         const newUser = new User({
             username,
             email,
-            password: password
+            password: password,
+            location,
+            interests
         })
 
         await newUser.save();
