@@ -3,6 +3,7 @@ import app from "./src/app.js";
 import { Server } from "socket.io";
 import connectDB from "./src/config/db.js";
 import Connection from "./src/models/connection.js";
+import Message from "./src/models/message.js";
 
 const server = http.createServer(app);
 const onlineUsers = new Map();
@@ -15,51 +16,68 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log("User connected ", socket.id);
 
-  // register user with socket id
   socket.on("join", (userId) => {
-    onlineUsers.set(userId, socket.id);
-  })
+    if (!userId) return;
+    socket.data.userId = String(userId);
+    onlineUsers.set(String(userId), socket.id);
+  });
 
-  //send message to a user
   socket.on("sendMessage", async (data) => {
     try {
-      const { receiverId, content } = data;
+      const senderId = socket.data.userId;
+      const { receiverId, content } = data || {};
+
+      if (!senderId || !receiverId || !content?.trim()) {
+        return socket.emit("error", { message: "Missing sender, receiver, or message content" });
+      }
 
       const connection = await Connection.findOne({
         status: "accepted",
         $or: [
-          { senderId: req.id, receiverId },
-          { senderId: receiverId, receiverId: req.id }
-        ]
+          { senderId, receiverId },
+          { senderId: receiverId, receiverId: senderId },
+        ],
       });
 
       if (!connection) {
-        return socket.emit("error", "Not allowed to chat");
+        return socket.emit("error", { message: "Not allowed to chat" });
       }
 
-      const receiverSocketId = onlineUsers.get(receiverId);
+      const newMessage = await Message.create({
+        senderId,
+        receiverId,
+        content: content.trim(),
+      });
+
+      const payload = {
+        _id: String(newMessage._id),
+        senderId,
+        receiverId,
+        content: newMessage.content,
+        createdAt: newMessage.createdAt,
+      };
+
+      socket.emit("message_sent", payload);
+
+      const receiverSocketId = onlineUsers.get(String(receiverId));
       if (receiverSocketId) {
-        io.to(receiverSocketId).emit("receive_message", {
-          senderId,
-          message,
-        });
+        io.to(receiverSocketId).emit("receive_message", payload);
       }
     } catch (error) {
-      return socket.emit("error", "Internal Server Error.." + error.message);
+      return socket.emit("error", { message: "Internal Server Error: " + error.message });
     }
-  })
-
-  if (receiver.isBot) {
-    socket.emit("receive_message", botMessage);
-  }
+  });
 
   socket.on("disconnect", () => {
+    const uid = socket.data.userId;
+    if (uid && onlineUsers.get(uid) === socket.id) {
+      onlineUsers.delete(uid);
+    }
     console.log("User Disconnected");
   });
-})
+});
 
 server.listen(3000, () => {
   connectDB();
   console.log("Server is running....");
-})
-
+});

@@ -1,6 +1,7 @@
 import User from "../models/user.js";
 import cloudinary from "../config/cloudinary.js";
 import uploadFromBuffer from "../utils/uploadFromBuffer.js";
+import streamifier from "streamifier";
 import env from "dotenv";
 import Connection from "../models/connection.js";
 import Message from "../models/message.js";
@@ -137,6 +138,39 @@ export const searchUsers = async (req, res) => {
     }
 }
 
+/** Browse travelers (e.g. map / find companions). Excludes current user; optional interest tag. */
+export const discoverTravelers = async (req, res) => {
+    try {
+        const limit = Math.min(80, Math.max(1, parseInt(req.query.limit, 10) || 40));
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const skip = (page - 1) * limit;
+        const interest = (req.query.interest || "").trim();
+        const query = { _id: { $ne: req.id } };
+        if (interest && interest !== "All") {
+            query.interests = interest;
+        }
+        const users = await User.find(query)
+            .select("username profilePic location interests isBot")
+            .skip(skip)
+            .limit(limit)
+            .sort({ username: 1 });
+        const totalUsers = await User.countDocuments(query);
+        return res.send({
+            status: 200,
+            message: "Travelers fetched successfully",
+            users,
+            totalUsers,
+            totalPages: Math.max(1, Math.ceil(totalUsers / limit)),
+            currentPage: page,
+        });
+    } catch (error) {
+        return res.send({
+            status: 500,
+            message: "Internal Server Error.." + error.message,
+        });
+    }
+};
+
 export const sendRequest = async (req, res) => {
     try {
         const { receiverId } = req.body;
@@ -146,7 +180,7 @@ export const sendRequest = async (req, res) => {
                 message: "Receiver ID is required to send a connection request.."
             })
         }
-        if (receiverId === req.id) {
+        if (String(receiverId) === String(req.id)) {
             return res.send({
                 status: 400,
                 message: "You cannot send request to yourself"
@@ -154,20 +188,32 @@ export const sendRequest = async (req, res) => {
         }
 
         const existing = await Connection.findOne({
-            senderId: req.id,
-            receiverId: receiverId
+            $or: [
+                { senderId: req.id, receiverId },
+                { senderId: receiverId, receiverId: req.id }
+            ]
         });
 
         if (existing) {
-            return res.status(400).json({
-                success: false,
-                message: "Request already sent"
+            if (existing.status === "accepted") {
+                return res.send({
+                    status: 400,
+                    message: "You are already connected with this user"
+                });
+            }
+            const iAmSender = String(existing.senderId) === String(req.id);
+            return res.send({
+                status: 400,
+                message: iAmSender
+                    ? "Connection request already sent"
+                    : "This traveler already sent you a request — check Pending requests."
             });
         }
-        const newRequest = new connection({
+
+        const newRequest = new Connection({
             senderId: req.id,
-            receiverId: receiverId,
-        })
+            receiverId,
+        });
         await newRequest.save();
         return res.send({
             status: 200,
@@ -190,7 +236,8 @@ export const getRequests = async (req, res) => {
         }).populate("senderId", "username profilePic location interests");
 
         const sentRequests = await Connection.find({
-            senderId: req.id
+            senderId: req.id,
+            status: "pending"
         }).populate("receiverId", "username profilePic location interests");
 
         return res.send({
@@ -280,20 +327,6 @@ export const sendMessage = async (req, res) => {
             ]
         });
 
-        if (connection.isBot) {
-            const botReply = await getBotReply(content);
-
-            const botMessage = await Message({
-                sender: receiverId, // bot
-                receiver: senderId,
-                content: botReply,
-            });
-
-            await botMessage.save();
-
-            return { content, botMessage };
-        }
-
         if (!connection) {
             return res.send({
                 status: 403,
@@ -357,21 +390,40 @@ export const chatbotController = async (req, res) => {
 
 export const getAllBlogs = async (req, res) => {
     try {
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
+        const skip = (page - 1) * limit;
 
-        // 🔥 Query DB
-        const blogs = await Blog.find()
+        const filter = {};
+        const category = req.query.category || req.query.tag;
+        if (category && category !== "All") {
+            filter.category = category;
+        }
+        const search = (req.query.search || "").trim();
+        if (search) {
+            filter.$or = [
+                { title: { $regex: search, $options: "i" } },
+                { story: { $regex: search, $options: "i" } },
+                { location: { $regex: search, $options: "i" } },
+            ];
+        }
 
-        // 🔹 Total count
-        const total = await Blog.countDocuments(filter);
+        const [blogs, total] = await Promise.all([
+            Blog.find(filter)
+                .populate("author", "username profilePic")
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit),
+            Blog.countDocuments(filter),
+        ]);
 
         res.status(200).json({
             success: true,
             total,
-            page: Number(page),
-            totalPages: Math.ceil(total / limit),
+            page,
+            totalPages: Math.max(1, Math.ceil(total / limit)),
             data: blogs,
         });
-
     } catch (error) {
         res.status(500).json({
             success: false,
@@ -408,11 +460,16 @@ export const createBlog = async (req, res) => {
         let uploadedImages = [];
 
         if (req.files && req.files.length > 0) {
-            for (let file of req.files) {
-                const result = await cloudinary.uploader.upload(file.path, {
-                    folder: "blogs",
+            for (const file of req.files) {
+                const buffer = file.buffer;
+                if (!buffer) continue;
+                const result = await new Promise((resolve, reject) => {
+                    const stream = cloudinary.uploader.upload_stream(
+                        { folder: "blogs" },
+                        (err, uploadResult) => (err ? reject(err) : resolve(uploadResult))
+                    );
+                    streamifier.createReadStream(buffer).pipe(stream);
                 });
-
                 uploadedImages.push({
                     url: result.secure_url,
                     public_id: result.public_id,
@@ -429,7 +486,7 @@ export const createBlog = async (req, res) => {
             category,
             tags,
             tripMood,
-            author: req.user._id,
+            author: req.id,
         });
 
         res.status(201).json({
