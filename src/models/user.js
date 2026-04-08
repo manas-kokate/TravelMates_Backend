@@ -8,6 +8,7 @@ const userSchema = new Schema({
     email: {
         type: String,
         required: true,
+        unique: true,
     },
     password: {
         type: String,
@@ -26,6 +27,10 @@ const userSchema = new Schema({
     interests: {
         type: [String],
         trim: true
+    },
+    isBot: {
+        type: Boolean,
+        default: false
     }
 }, { timestamps: true });
 

@@ -8,7 +8,12 @@ env.config();
 export const registerUser = async (req, res) => {
     try {
         const { username, email, password, location, interests } = req.body;
-
+        if (!username || !email || !password || !location) {
+            return res.send({
+                status: 400,
+                message: "All fields are required...!"
+            })
+        }
         // existing user
         const existingUser = await User.findOne({
             $or: [{ email }, { username }]
@@ -17,7 +22,7 @@ export const registerUser = async (req, res) => {
 
         if (existingUser) {
             return res.send({
-                status: 201,
+                status: 200,
                 message: "User already exists...!"
             })
         }
