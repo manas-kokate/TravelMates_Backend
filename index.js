@@ -14,7 +14,6 @@ const io = new Server(server, {
 });
 
 io.on("connection", (socket) => {
-  console.log("User connected ", socket.id);
 
   socket.on("join", (userId) => {
     if (!userId) return;
@@ -73,7 +72,6 @@ io.on("connection", (socket) => {
     if (uid && onlineUsers.get(uid) === socket.id) {
       onlineUsers.delete(uid);
     }
-    console.log("User Disconnected");
   });
 });
 

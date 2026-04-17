@@ -8,6 +8,7 @@ const router = express.Router();
 
 router.post('/register', registerUser);
 router.post('/login', loginUser);
+
 router.post('/refreshToken', authMiddleware, refreshToken);
 router.get('/currentUser', authMiddleware, getCurrentLoggedInUser);
 router.put('/updateUserProfile', authMiddleware, updateUserProfile);

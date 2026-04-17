@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { generateAccessToken, generateRefreshToken } from "../utils/generateToken.js";
 import jwt from "jsonwebtoken";
 import env from "dotenv";
+import { sendEmail } from "../services/mailer.js";
 env.config();
 
 export const registerUser = async (req, res) => {
@@ -42,7 +43,6 @@ export const registerUser = async (req, res) => {
             message: "User registered successfully...!",
             user: newUser
         })
-
     } catch (error) {
         return res.send({
             status: 500,

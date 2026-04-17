@@ -80,6 +80,7 @@ export const uploadProfilePic = async (req, res) => {
             })
         }
         const result = await uploadFromBuffer(req.file.buffer);
+        console.log(req.file)
         user.profilePic = result.secure_url;
         await user.save();
         return res.send({
@@ -138,7 +139,6 @@ export const searchUsers = async (req, res) => {
     }
 }
 
-/** Browse travelers (e.g. map / find companions). Excludes current user; optional interest tag. */
 export const discoverTravelers = async (req, res) => {
     try {
         const limit = Math.min(80, Math.max(1, parseInt(req.query.limit, 10) || 40));
@@ -200,6 +200,14 @@ export const sendRequest = async (req, res) => {
                     status: 400,
                     message: "You are already connected with this user"
                 });
+            }
+            if (existing.status === "rejected") {
+                existing.status = "pending"
+                await existing.save()
+                return res.send({
+                    status: 200,
+                    message: "Connection request sent again."
+                })
             }
             const iAmSender = String(existing.senderId) === String(req.id);
             return res.send({
@@ -414,7 +422,7 @@ export const getAllBlogs = async (req, res) => {
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit),
-            Blog.countDocuments(filter),
+            Blog.countDocuments(filter).sort({ createdAt: -1 }),
         ]);
 
         res.status(200).json({
